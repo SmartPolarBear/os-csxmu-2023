@@ -1,0 +1,5 @@
+
+https://github.com/YOUSIKI/Docker-Nachos.git
+docker buildx build -t nachos --build-arg DOCKER_MIRROR=true  --build-arg DOCKER_SHELL=zsh .
+
+update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.8 100

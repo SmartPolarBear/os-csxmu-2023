@@ -343,12 +343,12 @@ owner_ = currentThread;
 即可完成加锁。
 
 \begin{listing}[htb]
-	\caption{\texttt{LockGuard}实现}
+	\caption{插入实现}
 	\label{code:append}
 	\begin{minted}{cpp}
 void DLList::Append(void* item)
 {
-	LockGuard g(lock_);
+	LockGuard g(lock_); // 新增代码
 
 	RAIIListValidator _(*this, __FUNCTION__);
 
@@ -396,6 +396,22 @@ void* DLList::Remove(int* keyPtr)
 	\end{minted}
 \end{listing}
 
+\subsection{测试}
+
+为了测试，线程安全的双线链表实现，我使用了实验一中的代码。作为快速的回忆，在实验一中，
+我实现了基于\texttt{RAII}的链表自动检查，来检查链表中可能出现的错误。
+
+如图~\ref{fig:threads}，在实验一中观察到不当设置指针导致的Segmentation Fault错误的位置\texttt{Yield}也不会导致任何问题的产生。
+因为它通过了自动检查器的检查。
+
+\begin{figure}[htb]
+	\centering
+	\caption{线程安全的双向链表测试}
+	\label{fig:threads}
+	\includegraphics[width=0.6\linewidth]{thread.png}
+\end{figure}
+
+\newpage
 
 \section{实现一个线程安全的表结构}
 
@@ -437,21 +453,32 @@ void Table::Release(int index)
 	\end{minted}
 \end{listing}
 
+\subsection{测试}
 
-\clearpage
+其运行结果如图~\ref{fig:tbl}。可见多个线程可以正常地进行存取。
+\begin{figure}[htb]
+	\centering
+	\caption{线程安全的表结构测试}
+	\label{fig:tbl}
+	\includegraphics[width=0.4\linewidth]{tbl.png}
+\end{figure}
+
+
+\newpage
+
 \section{实现一个大小受限的缓冲区}
 
-这个缓冲区类是一个有界缓冲区，有两个主要的方法，分别是写方法\texttt{Write}和读方法\texttt{Read}。
+有界缓冲区有两个主要的方法，分别是写方法\texttt{Write}和读方法\texttt{Read}。
 使用缓冲区的过程，实质上就是一个缓冲区大小受限的生产者消费者问题。因此为了保证线程安全，
 我在类中使用了锁以及条件变量，进而使用管程的结构保证正确的执行。
 
 在管程解决生产者消费者问题的基本框架下，实际的业务逻辑就是维护循环队列的队头元素、队尾元素的索引。
 因此，将业务逻辑置于管程解决生产者消费者问题的框架下，就得到了具体实现，如代码~\ref{code:buf}。
+
 \begin{listing}[htb]
-	\caption{\texttt{LockGuard}实现}
+	\caption{\texttt{BoundedBuffer}实现}
 	\label{code:buf}
 	\begin{minted}{cpp}
-// Implementation of BoundedBuffer Write method
 void BoundedBuffer::Write(void* data, int size) {
     LockGuard g(mutex_);
     while (!(size_ < maxsize_))
@@ -466,7 +493,6 @@ void BoundedBuffer::Write(void* data, int size) {
     }
     not_empty_->Broadcast(mutex_);
 }
-// Implementation of BoundedBuffer Read method
 void BoundedBuffer::Read(void* data, int size) {
     LockGuard g(mutex_);
     while (!(size_ >= size))
@@ -484,24 +510,18 @@ void BoundedBuffer::Read(void* data, int size) {
 	\end{minted}
 \end{listing}
 
-% 为了实现这个缓冲区，我们使用了生产者消费者问题的并发模型。缓冲区类似于一个生产者消费者的容器，生产者将数据写入缓冲区，消费者从缓冲区中读取数据。为了保证生产者和消费者之间的同步，我们使用了条件变量。
+\subsection{测试}
 
-% 条件变量是一种等待机制，它允许线程在满足某个条件之前进入等待状态。当条件满足时，线程将被唤醒并继续执行。在这个缓冲区中，我们使用了两个条件变量，一个表示缓冲区不为空（not_empty_），另一个表示缓冲区不为满（not_full_）。当缓冲区为空时，消费者将进入等待状态，等待生产者向缓冲区写入数据；当缓冲区满时，生产者将进入等待状态，等待消费者读取缓冲区中的数据。
+运行效果如图~\ref{fig:buf}。线程1负责生产15个元素，其余的线程分别获得$pid-1$个元素。
+可见，线程安全的缓冲区可以正常地工作。并且想要获得超过15个的额外元素的线程被置于休眠模式了。
+\begin{figure}[H]
+	\centering
+	\caption{线程安全的缓冲区测试}
+	\label{fig:buf}
+	\includegraphics[width=0.6\linewidth]{bb.png}
+\end{figure}
 
-% 在这个缓冲区的实现中，我们还使用了LockGuard类。LockGuard类是一个RAII锁管理类，用于自动管理锁的获取和释放。当LockGuard对象被创建时，它会自动获取锁；当LockGuard对象被销毁时，它会自动释放锁。这种方式可以有效地避免锁忘记释放的问题。
-
-
-% 该缓冲区使用了管程结构，管程是一种用于并发编程的同步机制，由共享数据结构、对该结构进行操作的一组过程以及互斥锁组成。它将同步的方法封装在一个可重入的代码段中，只有获得互斥锁的线程才能访问该代码段，从而避免了竞争条件和死锁的发生。
-
-% 在该缓冲区中，使用了两个条件变量 not_full_ 和 not_empty_，分别用于判断缓冲区是否已满和是否为空。通过 Wait()、Broadcast() 和 Signal() 等方法来操作这两个条件变量，从而达到线程安全的目的。
-
-% 对于 Write() 方法，当缓冲区已满时，线程会调用 not_full_->Wait(mutex_)，将该线程阻塞，并释放互斥锁 mutex_，等待被其他线程通过 not_full_->Signal() 或 not_full_->Broadcast() 信号唤醒，直到缓冲区有空位。如果缓冲区有空位，则将数据写入缓冲区，并通过 not_empty_->Broadcast(mutex_) 唤醒正在等待的线程，通知它们可以从缓冲区中读取数据了。
-
-% 对于 Read() 方法，当缓冲区为空时，线程会调用 not_empty_->Wait(mutex_)，将该线程阻塞，并释放互斥锁 mutex_，等待被其他线程通过 not_empty_->Signal() 或 not_empty_->Broadcast() 信号唤醒，直到缓冲区中有足够的数据。如果缓冲区中有足够的数据，则将数据从缓冲区中读取出来，并通过 not_full_->Broadcast(mutex_) 唤醒正在等待的线程，通知它们可以将数据写入缓冲区了。
-
-% 因此，该缓冲区通过使用管程结构和条件变量，保证了读写操作的互斥性和同步性，避免了竞争条件和死锁的发生，从而实现了线程安全。
-
-% 使用Boardcast而非Signal是因为
+\newpage
 
 \section{实验总结}
 

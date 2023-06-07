@@ -1,0 +1,6 @@
+C:\WINDOWS\system32\wsl.exe --distribution Ubuntu --exec /usr/bin/zsh -c "export CMAKE_COLOR_DIAGNOSTICS=ON && export CLION_IDE=TRUE && export JETBRAINS_IDE=TRUE && cd /mnt/d/Projects-Practice/OS/experiment5/code/cmake-build-debug-wsl && /usr/bin/cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=/usr/bin/gcc '-DCMAKE_CXX_COMPILER=/usr/bin/g++' -G 'CodeBlocks - Unix Makefiles' -S /mnt/d/Projects-Practice/OS/experiment5/code -B /mnt/d/Projects-Practice/OS/experiment5/code/cmake-build-debug-wsl"
+CMake Error at CMakeLists.txt:1 (cmake_minimum_required):
+  CMake 3.25 or higher is required.  You are running version 3.22.1
+
+
+-- Configuring incomplete, errors occurred!

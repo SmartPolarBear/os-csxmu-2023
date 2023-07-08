@@ -82,9 +82,9 @@
 %%%%%%%%%%%%%
 \newcommand{\StudentNumber}{22920202204622}  % Fill your student number here
 \newcommand{\StudentName}{熊恪峥}  % Replace your name here
-\newcommand{\PaperTitle}{实验（四）内存管理}  % Change your paper title here
+\newcommand{\PaperTitle}{实验（五）文件系统}  % Change your paper title here
 \newcommand{\PaperType}{操作系统实验报告} % Replace the type of your report here
-\newcommand{\Date}{2023年6月5日}
+\newcommand{\Date}{2023年6月8日}
 \newcommand{\College}{信息学院}
 \newcommand{\CourseName}{操作系统}
 %%%%%%%%%%%%%
@@ -190,216 +190,87 @@
 
 \begin{spacing}{1.2}
 
-\section{实验内容}
-
-本实验利用内核函数 \texttt{kmalloc()},\texttt{ vmalloc()}实现内存的分配，并要求学生根据提示实现基于最佳适应算法的\texttt{bf\_malloc}内存分配器。  
-
 \section{实验目的}
 
 \begin{enumerate}
-	\item 学习掌握\texttt{kmalloc()}和\texttt{vmalloc()}分配内存的差异；
-	\item 加深对首次适应算法和最佳适应算法的理解；
-	\item 锻炼编写内核模块的能力。
+	\item 学习掌握Linux系统中普通文件和目录文件的区别与联系
+	\item 学习掌握Linux管理文件的底层数据结构
+	\item 学习掌握Linux文件存储的常见形式
+	\item 加深对读写者问题的理解和信号量的使用
 \end{enumerate}
 
-\section{使用\texttt{kmalloc}分配内存}
+\section{实验内容}
 
-\texttt{kmalloc}具有两个参数，第一个参数是要分配的内存大小，第二个参数是分配内存的类型。
-在本次实验中，我们使用\texttt{GFP\_KERNEL}来在内核空间分配内存。
-该函数失败时会返回\texttt{NULL}，因此我们需要检查返回值是否为\texttt{NULL}，如果是则说明分配失败，
-则输出错误信息“Failed to allocate kmallocmem1/ kmallocmem2/ kmallocmem3 / kmallocmem4!”。
+\subsection{\texttt{changeDir}函数}
 
-根据以上思路，编写代码~\ref{code:kmalloc}。
-\begin{listing}[htb]
-	\caption{使用\texttt{kmalloc}分配内存}
-	\label{code:kmalloc}
-	\inputminted[firstline=14,lastline=42]{c}{../code/1/1.c}
-\end{listing}
-代码~\ref{code:kmalloc}将在模块加载时执行，遇到错误输出错误消息，否则输出分配内存的大小。
-代码的运行结果如图~\ref{fig:kmalloc}所示。
-\begin{figure}[htb]
-	\centering
-	\caption{使用\texttt{kmalloc}分配内存}
-	\label{fig:kmalloc}
-	\begin{subfigure}{0.45\textwidth}
-		\includegraphics[width=0.9\textwidth]{images/km1.png}
-	\end{subfigure}
-	\begin{subfigure}{0.45\textwidth}
-		\includegraphics[width=0.9\textwidth]{images/km2.png}
-	\end{subfigure}
-\end{figure}
+首先使用 findUnitInTable 函数定位目标目录项的索引。
+如果返回的索引为-1，则表示该目录项不存在，需要输出提示信息。
+接着，检查该目录项是否是目录类型，如果不是需要输出提示信息。
+若是目录，则需要修改当前目录，并根据需要修改全局绝对路径。
+具体来说，如果目标目录是父目录，则需要去掉路径最后一部分，否则需要在路径和目录名之间进行拼接，以得到新的路径。
 
-可见，前两个请求成功了，而后两个请求失败了。
+\inputminted[firstline=68,lastline=107]{cpp}{../code/File.cpp}
 
-\subsection{\texttt{kmalloc}的分配上限}
+\subsection{\texttt{changeName}函数}
 
-常识告诉我们，由于kmalloc分配时需要保证有连续的物理内存页一定空闲，所以一定具有上限。
-同时，查阅Linux内核文档，可以发现如下内容：
-\begin{quotation}
-	The maximal size of a chunk that can be allocated with kmalloc is limited. The actual limit depends on the hardware and the kernel configuration, but it is a good practice to use kmalloc for objects smaller than page size.
-\end{quotation}
-因此，确实具有上限。
+首先需要定位到要修改的目录项。如果文件名不存在，则需要输出提示信息。
+如果存在，则可以直接修改目录项的名称。
 
-首先，为了找到上限，可以修改代码~\ref{code:kmalloc}。
-通过不断修改\texttt{kmallocmem3}和\texttt{kmallocmem4}的大小，
-保证前者请求成功，后者请求失败，并逐步减半区间长度，可以快速逼近得到上限。
-根据以上过程，得到了上限是4MB。
-
-同时，该值也可以从内核源码中得到依据：查看\texttt{include/linux/slab.h}文件，其中定义
-宏\texttt{KMALLOC\_MAX\_SIZE}为\texttt{(1UL << KMALLOC\_SHIFT\_HIGH)}，而宏
-\texttt{KMALLOC\_SHIFT\_HIGH}又定义为：
-\begin{minted}{c}
-#define KMALLOC_SHIFT_HIGH      ((MAX_ORDER + PAGE_SHIFT - 1) <= 25 ? \
-                               (MAX_ORDER + PAGE_SHIFT - 1) : 25)
-\end{minted}
-在x86架构下，\texttt{MAX\_ORDER}为11，\texttt{PAGE\_SHIFT}为12，因此可以计算得出：
-\begin{equation}
-	\texttt{KMALLOC\_MAX\_SIZE} = 2^{11+12-1} = 4\texttt{MB}
-\end{equation}
-同时，这也说明了在任何架构下，\texttt{KMALLOC\_MAX\_SIZE}都不能超过32MB。因为宏\texttt{KMALLOC\_SHIFT\_HIGH}
-保证了该值不超过$2^{25}\texttt{B}=32\texttt{MB}$。
-
-\subsection{分配区域}
-
-由于指定了分配内存的类型为\texttt{GFP\_KERNEL}，因此分配的内存位于内核空间，分配的物理地址会处于896MB之下（32位架构），
-然后根据Linux内核的内存管理机制，会将这些物理地址映射到2GB之上。这符合图~\ref{fig:mem}中的结果。
-
-\section{使用\texttt{vmalloc}分配内存}
-
-\texttt{vmalloc}可以分配虚拟连续的内存，但是不能保证物理连续。
-这降低了对物理内存的要求。编写代码非常简单，只需将代码~\ref{code:kmalloc}中的\texttt{kmalloc}替换为\texttt{vmalloc}即可。
-例如分配\texttt{vmallocmem1}时，代码如下：
-\begin{listing}[htb]
-	\caption{使用\texttt{kmalloc}分配内存}
-	\label{code:kmalloc}
-	\inputminted[firstline=17,lastline=22]{c}{../code/2/2.c}
-\end{listing}
-
-运行结果如图~\ref{fig:vmalloc}所示。
-\begin{figure}[htb]
-	\centering
-	\caption{使用\texttt{vmalloc}分配内存}
-	\label{fig:vmalloc}
-	\includegraphics[width=0.9\textwidth]{images/vm.png}
-\end{figure}
-可见，\texttt{vmalloc}可以成功分配远大于上述\texttt{kmalloc}上限的内存。
-因为真正对物理内存页的分配被推迟到了第一次访问时。这既增加了分配的灵活性，也会带来无法用于DMA等问题。
-
-\subsection{分配区域}
-
-\texttt{vmalloc}可以分配虚拟连续的内存，但是不能保证物理连续。而\texttt{kmalloc}则要求物理连续的页面。
-\texttt{vmalloc}会将内存地址分配到单独的一个区域，这个区域由宏\texttt{VMALLOC\_START}和\texttt{VMALLOC\_END}指定。
-在i386架构（32位）下会优先选择\texttt{ZONE\_HIGHMEM}，否则会选择\texttt{ZONE\_NORMAL}，在图~\ref{fig:vmalloc}中，
-由于默认使用了32位编译，所以符合这种情况，分配的地址在\texttt{0xc0000000}附近。
-
-在64位x86架构下，由于地址空间大大扩展了，因此分配的区域也更大，该区域处在地址的Canonical Bits为1的区域，处在内存空间较高的位置，
-根据文档\footnote{\url{https://elixir.bootlin.com/linux/v5.0/source/Documentation/x86/x86_64/mm.txt}}，
-该区域的起始地址为\texttt{ffffc90000000000}，结束地址为\texttt{ffffe8ffffffffff}。
-
-\section{阅读并理解首次适应算法的实现}
-
-首先，内存分配器使用结构\texttt{header}进行管理：
-\inputminted[firstline=10,lastline=18]{c}{../code/3/ff_malloc.c}
-它记录了每一个空闲块的长度和下一块的位置。能够把内存块通过链表的方式进行记录和管理。
-具体的链表头为\texttt{list}指针。
-
-\subsection{\texttt{ff\_malloc}}
-
-\texttt{ff\_malloc}为内存分配的具体逻辑，用于分配\texttt{size}大小的内存。
-同时，如果未初始化，也会初始化链表和相应的指针。
-初始化完成后，就会查找第一个适配的块并进行拆分，如果没有这样的块就再调用\texttt{sbrk}进行分配。
-具体流程如图~\ref{fig:ff}。
-
-\begin{figure}[htb]
-	\centering
-	\caption{首次适配算法}
-	\label{fig:ff}
-	\includegraphics[width=0.4\textwidth]{images/ff.png}
-\end{figure}
+\inputminted[firstline=109,lastline=119]{cpp}{../code/File.cpp}
 
 
-\subsection{\texttt{free}}
+\subsection{\texttt{creatDir}函数}
 
-该函数会遍历链表，找到内存地址合适的位置，将块插入。此外，还会合并相邻的空闲块。
+首先需要验证目录名的长度是否合法。
+如果目录名过长，需要输出提示信息。
+接着，可以使用 getBlock 函数为目录表分配一个大小为 1 的空间。
+如果分配失败，则需要输出提示信息。然后需要使用 addDirUnit 函数将新目录作为目录项添加至当前目录。
+按照文件系统的规定，还需要向父目录添加一个目录项。
+我们可以创建一个新的目录项表，其中需要将目录项数目初始化为 0。
+最后需要再次调用 addDirUnit 函数将父目录添加到新目录表，并将父目录设置为当前目录。
 
-\subsection{\texttt{calloc}}
+\inputminted[firstline=147,lastline=168]{cpp}{../code/File.cpp}
 
-\texttt{calloc}分配指定大小的内存并置为0，这是通过调用\texttt{ff\_malloc}并使用\texttt{memset}赋值实现的。
 
-\subsection{\texttt{test.c}}
+\subsection{\texttt{addDirUnit}函数}
 
-该程序使用并测试了首次适配的分配和释放功能，它进行三轮测试，
-每轮测试都是连续分配逐渐增大大小的内存块并写入数据，并输出相应信息。
-最后，对这些内存块进行释放。
+首先需要对目录项的合法性进行检测。
+具体分为两个部分：一是检查目录是否已满，二是遍历目录表检查是否存在同名文件。
+如果目录项不合法，则添加失败，并显示相应提示信息。
+如果目录项合法，则构建新目录项，并设置 fileName 文件名、type 类型和 FCBBlockNum 大小等各个属性。
 
-\section{实现最佳适应算法}
+\inputminted[firstline=200,lastline=224]{cpp}{../code/File.cpp}
 
-最佳适配算法中\texttt{free}、\texttt{calloc}的实现都与首次适配相同，
-只需要修改具体的分配逻辑。在分配时遍历整个链表，选择与所要求尺寸差值最小的
-块进行分配，如代码~\ref{code:findclose}。
-\begin{listing}[htb]
-	\caption{查找最接近的内存块}
-	\label{code:findclose}
-	\inputminted[firstline=84,lastline=106]{c}{../code/3/bf_malloc.c}
-\end{listing}
-当找到这样的块时，采用和首次适配相同的拆分策略，并返回相应的内存。
-如果没有找到这样的块，则使用\texttt{sbrk}系统调用分配内存，
-将新的块插入链表中，然后再次调用\texttt{bf\_malloc}进行分配。
-由于这次一定能找到合适的块，因此不会再次调用\texttt{bf\_malloc}。
-因此，这种做法不会带来过多的额外开销。如代码~\ref{code:sbrk}。
-\begin{listing}[htb]
-	\caption{处理找不到块的情况}
-	\label{code:sbrk}
-	\inputminted[firstline=136,lastline=159]{c}{../code/3/bf_malloc.c}
-\end{listing}
 
-\subsection{对比}
+\subsection{\texttt{deleteFile}函数}
 
-为了对比两种不同的分配算法，我进一步修改代码，在每次分配成功以后输出整个空闲链表的内容，其中0代表头节点，如图~\ref{fig:cmpffbf}。
-\begin{figure}[htb]
-	\centering
-	\caption{使用不同的策略分配内存}
-	\label{fig:cmpffbf}
-	\begin{subfigure}{0.45\textwidth}
-		\includegraphics[width=0.9\textwidth]{images/ff_fl.png}
-	\end{subfigure}
-	\begin{subfigure}{0.45\textwidth}
-		\includegraphics[width=0.9\textwidth]{images/bf_fl.png}
-	\end{subfigure}
-\end{figure}
-首先，测试函数会进行10次内存分配，然后释放一部分块，此时根据输出，有三个空闲的内存块，
-它们的长度分别是7,5,996。
+根据文件系统的规定，自动创建的父目录不能被删除，需要忽略掉。
+接着要查找目标文件的索引。
+如果查找失败或者查找到的目录项的文件类型是目录，则删除失败，并显示相应提示信息。
+否则需要释放该文件的内存并将该目录项从目录表中删除。
 
-此后的分配中，首次适配和最佳适配将表现出差别：接下来，会分配大小为4的块。
-此时，首次适配找到块7，拆分后返回。这是，剩下的三块为3,5,996。而最佳适配策略
-会找出与请求尺寸大小最接近的块，则会找到块5，进行拆分后剩余的内存块为7,1,996。
+\inputminted[firstline=226,lastline=254]{cpp}{../code/File.cpp}
 
-一方面，最佳适配会遍历整个链表，查找的时间会更长。假设有$n$个块，每个块成为最佳适配的概率则为$\frac{1}{n}$。
-那么最佳适配的查找长度的数学期望为：
-\begin{equation}
-	\label{eqn:bf}
- 	\mathbb{E}[L] = \sum_{i=1}^{n} \frac{i}{n} = \frac{n+1}{2}
-\end{equation}
-而首次适配中，每个块平均情况下能否被选中的次数大致相等，则选中的概率为$\frac{1}{2}$，
-选择第一块的概率为$\frac{1}{2}$，选择第二块的概率为$\frac{1}{2}\times \left(1-\frac{1}{2}\right)$，以此类推。
-查找长度的期望为：
-\begin{equation}
-	\label{eqn:ff}
- 	\mathbb{E}[L] = \sum_{i=1}^{n} \frac{1}{2^n}\times n = \left(2-\frac{1}{2^{n-1}}\right)-\frac{n}{2^n}
-\end{equation}
-显然，比较\eqref{eqn:bf}和\eqref{eqn:ff}，当$n$足够大时，首次适配的查找长度更短。
 
-另一方面，首次适配可能拆分较大的内存块，导致剩余的内存块较小，而最佳适配则会尽量保留较大的内存块。
-然而，由图~\ref{fig:cmpffbf}中的例子可以看出，最佳适配的效果并不好，因为它留下大量可能无法再分配的细碎的内存块，例如上例中的大小为1的块。
-这会导致内存碎片的显著增加。
+\subsection{\texttt{write\_file}函数}
+
+该函数与 read\_file 函数一起构成读者写者问题。
+write\_file 函数比较简单，只需要考虑写者锁，而不需要考虑读者锁。
+首先需要获取文件的控制块，接着获取写者锁。如果有写者正在写，则需要等待。
+在获取了写者锁之后，就可以开始写操作。首先获取文件大小和要写入数据的大小。
+需要注意的是，文件的大小是块的数量乘以块大小的乘积，不能仅将块的数量作为文件大小。
+然后使用 getBlockAddr 函数获取写入位置，进行循环写操作。
+写操作完成后，需要释放写者锁，以让其他写者写入数据。
+此外，需要检测写入的数据大小是否等于文件大小，如果相等，则表示文件已满，输出提示信息。
+
+\inputminted[firstline=412,lastline=436]{cpp}{../code/File.cpp}
 
 
 \section{实验总结}
 
-本次实验让我更深入地了解了Linux内存分配和管理的原理和方法，以及各种算法的实现。通过实践，我学会了如何使用\texttt{kmalloc()}和\texttt{vmalloc()}函数，
-并学会了如何实现first fit算法和best fit算法。在实践过程中进一步锻炼了内核模块编程和算法实现的能力。
-在进行实验的过程中，我还学会了如何查找Linux系统内核的文档，并且更了解了Linux操作系统的运作方式和内部结构，这对于我今后的学习和研究都有很大的帮助。
+本次实验中，我成功地实现了一个类似于 ramfs 的内存文件系统 myRAMFS。通过这个实验，我对文件系统底层存储数据结构的理解得到了加深，并且学习了如何实现一个简单的内存文件系统。在实验中，我通过学习掌握Linux系统中普通文件和目录文件的区别与联系，更深入地理解了Linux管理文件所使用的底层数据结构。通过阅读、理解提供的文件并正确处理文件系统的数据结构，包括目录项、文件节点等，我能够轻松地完成接下来的实验任务。通过类比已经实现的函数，加上注释的指导，我分别实现 changeDir、changeName、creatDir、addDirUnit、deleteFile 和 write\_file 函数。其中 write\_file 函数难度稍大，需要处理读写者问题和信号量的使用，联系了之前学习的内容。最后，我逐步测试了每个功能的正确性。
 
+在实验过程中，我通过实际操作实现了文件系统的创建、删除和文件的写入、读取等基本操作，并且可以支持多个进程同时对文件进行读写操作，更深入地体会到了信号量的使用和读写者问题的解决方法。我们还深入学习了Linux文件存储的常见形式，并且复习了学期初学习的如何使用信号量解决读写者问题。通过本次实验，我不仅巩固了对Linux文件系统底层数据结构的理解，还复习了同步互斥的各种方法，同时增强了对Linux系统编程的能力。总的来说，这个实验不仅对于加深我对文件系统的理解非常有帮助，还提高了我的编程技能和问题解决能力。
 
 \end{spacing}
 
